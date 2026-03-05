@@ -35,23 +35,119 @@ export function ChatPanel() {
     }
   };
 
+  const handleBoosterClick = (option: string) => {
+    if (!isAITyping) {
+      setInput('');
+      void sendUserMessage(option);
+    }
+  };
+
   const formatMessage = (content: string) => {
-    // Simple markdown-like rendering
-    return content.split('\n').map((line, i) => {
+    const lines = content.split('\n');
+    const elements: React.ReactNode[] = [];
+    const boosterOptions: { label: string; text: string }[] = [];
+    let inCodeBlock = false;
+    let codeBlockType = '';
+    let codeLines: string[] = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+
+      // Track code blocks
+      if (line.startsWith('```')) {
+        if (!inCodeBlock) {
+          inCodeBlock = true;
+          codeBlockType = line.slice(3).trim();
+          codeLines = [];
+          // Hide mermaid and mermaid-meta blocks
+          if (codeBlockType === 'mermaid' || codeBlockType === 'mermaid-meta') continue;
+          continue;
+        } else {
+          // Closing code block
+          if (codeBlockType === 'mermaid' || codeBlockType === 'mermaid-meta') {
+            inCodeBlock = false;
+            codeBlockType = '';
+            continue;
+          }
+          // Render json-checkpoint with copy button
+          if (codeBlockType === 'json-checkpoint') {
+            const checkpointContent = codeLines.join('\n');
+            elements.push(
+              <div key={`checkpoint-${i}`} className="my-2 rounded-lg border border-emerald-700/40 bg-emerald-950/30 overflow-hidden">
+                <div className="flex items-center justify-between px-3 py-1.5 bg-emerald-900/30 border-b border-emerald-700/30">
+                  <span className="text-[10px] font-medium text-emerald-400 uppercase tracking-wider">Checkpoint de Fase</span>
+                  <button
+                    onClick={() => navigator.clipboard.writeText(checkpointContent)}
+                    className="text-[10px] px-2 py-0.5 rounded bg-emerald-800/50 text-emerald-300 hover:bg-emerald-700/50 transition-colors"
+                  >
+                    Copiar estado
+                  </button>
+                </div>
+                <pre className="px-3 py-2 text-xs text-emerald-200 overflow-x-auto font-mono">{checkpointContent}</pre>
+              </div>
+            );
+            inCodeBlock = false;
+            codeBlockType = '';
+            continue;
+          }
+          // Render other code blocks
+          elements.push(
+            <pre key={`code-${i}`} className="my-2 rounded-lg bg-gray-900 border border-gray-700/50 px-3 py-2 text-xs text-gray-300 overflow-x-auto font-mono">
+              {codeLines.join('\n')}
+            </pre>
+          );
+          inCodeBlock = false;
+          codeBlockType = '';
+          continue;
+        }
+      }
+
+      if (inCodeBlock) {
+        if (codeBlockType === 'mermaid' || codeBlockType === 'mermaid-meta') continue;
+        codeLines.push(line);
+        continue;
+      }
+
+      // Detect booster options: [A] text, [B] text, [C] text
+      const boosterMatch = line.match(/^\[([A-C])\]\s*(.+)$/);
+      if (boosterMatch) {
+        boosterOptions.push({ label: boosterMatch[1], text: boosterMatch[2] });
+        continue;
+      }
+
       // Bold
       const formatted = line.replace(/\*\*(.*?)\*\*/g, '<strong class="text-white font-semibold">$1</strong>');
-      // Mermaid code blocks - hide them in chat (shown in diagram panel)
-      if (line.startsWith('```mermaid')) return null;
-      if (line.startsWith('```') && i > 0) return null;
 
-      return (
+      elements.push(
         <p
           key={i}
           className={`${line === '' ? 'h-2' : ''}`}
           dangerouslySetInnerHTML={{ __html: formatted }}
         />
       );
-    });
+    }
+
+    // Render booster options as clickable buttons at the end
+    if (boosterOptions.length > 0) {
+      elements.push(
+        <div key="boosters" className="flex flex-col gap-1.5 mt-3 pt-3 border-t border-gray-700/30">
+          {boosterOptions.map((opt) => (
+            <button
+              key={opt.label}
+              onClick={() => handleBoosterClick(opt.text)}
+              className="text-left text-xs px-3 py-2 rounded-lg bg-indigo-950/40 border border-indigo-700/30 text-indigo-300 hover:bg-indigo-900/40 hover:text-indigo-200 hover:border-indigo-600/40 transition-all group"
+            >
+              <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-indigo-800/60 text-[10px] font-bold text-indigo-200 mr-2 group-hover:bg-indigo-700/60">
+                {opt.label}
+              </span>
+              {opt.text}
+            </button>
+          ))}
+        </div>
+      );
+    }
+
+    return elements;
   };
 
   return (
