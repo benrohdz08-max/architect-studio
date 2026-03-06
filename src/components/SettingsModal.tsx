@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useProjectStore } from '../store/useProjectStore';
+
+const FOCUSABLE_SELECTOR = 'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
 interface SettingsModalProps {
   open: boolean;
@@ -9,6 +11,50 @@ interface SettingsModalProps {
 export function SettingsModal({ open, onClose }: SettingsModalProps) {
   const { aiMode, geminiApiKey, setAIMode, setGeminiApiKey } = useProjectStore();
   const [localKey, setLocalKey] = useState(geminiApiKey);
+  const modalRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<Element | null>(null);
+  const stableOnClose = useCallback(() => onClose(), [onClose]);
+
+  // Focus trap and Escape key
+  useEffect(() => {
+    if (!open) return;
+
+    // Remember which element triggered the modal for focus restoration
+    triggerRef.current = document.activeElement;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        stableOnClose();
+        return;
+      }
+      if (e.key === 'Tab' && modalRef.current) {
+        const focusable = modalRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    // Focus first focusable element
+    const firstFocusable = modalRef.current?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
+    firstFocusable?.focus();
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      // Restore focus to trigger element
+      if (triggerRef.current instanceof HTMLElement) {
+        triggerRef.current.focus();
+      }
+    };
+  }, [open, stableOnClose]);
 
   if (!open) return null;
 
@@ -18,10 +64,19 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-md mx-4 shadow-2xl">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="settings-title"
+        className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-md mx-4 shadow-2xl"
+      >
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800">
-          <h2 className="text-sm font-semibold text-white">Configuración</h2>
+          <h2 id="settings-title" className="text-sm font-semibold text-white">Configuración</h2>
           <button
             onClick={onClose}
             className="text-gray-500 hover:text-white transition-colors text-lg"

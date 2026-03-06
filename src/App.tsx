@@ -7,6 +7,7 @@ import { DiagramPanel } from './components/DiagramPanel';
 import { CodePanel } from './components/CodePanel';
 import { DiagramListSidebar } from './components/DiagramListSidebar';
 import { SettingsModal } from './components/SettingsModal';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 type PanelView = 'chat' | 'diagram' | 'code';
 
@@ -91,27 +92,35 @@ export default function App() {
         <div className="hidden md:flex flex-1 overflow-hidden">
           {/* Chat Panel */}
           <div className="flex-1 min-w-0 border-r border-gray-800">
-            <ChatPanel />
+            <ErrorBoundary fallbackMessage="Error en el chat">
+              <ChatPanel />
+            </ErrorBoundary>
           </div>
 
           {/* Diagram Panel */}
           <div className={`${showCode ? 'flex-1' : 'flex-[1.3]'} min-w-0 ${showCode ? 'border-r border-gray-800' : ''}`}>
-            <DiagramPanel />
+            <ErrorBoundary fallbackMessage="Error en el diagrama">
+              <DiagramPanel />
+            </ErrorBoundary>
           </div>
 
           {/* Code Panel (toggle) */}
           {showCode && (
             <div className="flex-1 min-w-0">
-              <CodePanel />
+              <ErrorBoundary fallbackMessage="Error en el editor">
+                <CodePanel />
+              </ErrorBoundary>
             </div>
           )}
         </div>
 
         {/* Mobile: Single panel */}
         <div className="flex md:hidden flex-1 overflow-hidden">
-          {mobilePanel === 'chat' && <ChatPanel />}
-          {mobilePanel === 'diagram' && <DiagramPanel />}
-          {mobilePanel === 'code' && <CodePanel />}
+          <ErrorBoundary fallbackMessage="Error en el panel">
+            {mobilePanel === 'chat' && <ChatPanel />}
+            {mobilePanel === 'diagram' && <DiagramPanel />}
+            {mobilePanel === 'code' && <CodePanel />}
+          </ErrorBoundary>
         </div>
       </main>
 

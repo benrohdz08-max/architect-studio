@@ -14,6 +14,23 @@ import {
   generateLocalResponse,
   sendToGemini,
 } from '../services/aiService';
+const DIAGRAM_TYPE_LABELS: Record<DiagramType, string> = {
+  flowchart: 'Flujo',
+  er: 'Entidad-Relacion',
+  sequence: 'Secuencia',
+  stateDiagram: 'Estados',
+  classDiagram: 'Clases',
+};
+
+function detectDiagramType(code: string): DiagramType {
+  const trimmed = code.trim();
+  if (trimmed.startsWith('erDiagram')) return 'er';
+  if (trimmed.startsWith('sequenceDiagram')) return 'sequence';
+  if (trimmed.startsWith('stateDiagram')) return 'stateDiagram';
+  if (trimmed.startsWith('classDiagram')) return 'classDiagram';
+  return 'flowchart';
+}
+
 import {
   generateDiagramForPhase,
   generateSubDiagram,
@@ -128,25 +145,18 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     set({ isAITyping: true });
 
     try {
-      let response: string;
+      const updatedMessages: ChatMessage[] = [...messages, {
+        id: uuidv4(),
+        role: 'user' as const,
+        content,
+        timestamp: Date.now(),
+        phase: currentPhase,
+      }];
 
+      let response: string;
       if (aiMode === 'gemini' && geminiApiKey) {
-        const updatedMessages = [...messages, {
-          id: uuidv4(),
-          role: 'user' as const,
-          content,
-          timestamp: Date.now(),
-          phase: currentPhase,
-        }];
         response = await sendToGemini(updatedMessages, projectData, currentPhase, geminiApiKey);
       } else {
-        const updatedMessages = [...messages, {
-          id: uuidv4(),
-          role: 'user' as const,
-          content,
-          timestamp: Date.now(),
-          phase: currentPhase,
-        }];
         response = generateLocalResponse(updatedMessages, projectData, currentPhase);
       }
 
@@ -154,10 +164,12 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       const mermaidCodes = extractMermaidFromText(response);
       if (mermaidCodes.length > 0) {
         mermaidCodes.forEach((code) => {
+          const detectedType = detectDiagramType(code);
+
           const diagram: Diagram = {
             id: uuidv4(),
-            title: `Diagrama IA - Fase ${currentPhase}`,
-            type: 'flowchart',
+            title: `${DIAGRAM_TYPE_LABELS[detectedType]} - Fase ${currentPhase}`,
+            type: detectedType,
             mermaidCode: code,
             phase: currentPhase,
             nodes: [],

@@ -115,15 +115,20 @@ export function ChatPanel() {
         continue;
       }
 
-      // Bold
-      const formatted = line.replace(/\*\*(.*?)\*\*/g, '<strong class="text-white font-semibold">$1</strong>');
+      // Render line with bold formatting using React elements (no dangerouslySetInnerHTML)
+      const parts = line.split(/\*\*(.*?)\*\*/g);
+      const lineElements = parts.map((part, j) =>
+        j % 2 === 1 ? (
+          <strong key={j} className="text-white font-semibold">{part}</strong>
+        ) : (
+          <span key={j}>{part}</span>
+        )
+      );
 
       elements.push(
-        <p
-          key={i}
-          className={`${line === '' ? 'h-2' : ''}`}
-          dangerouslySetInnerHTML={{ __html: formatted }}
-        />
+        <p key={i} className={`${line === '' ? 'h-2' : ''}`}>
+          {lineElements}
+        </p>
       );
     }
 

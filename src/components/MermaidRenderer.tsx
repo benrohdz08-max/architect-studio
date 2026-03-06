@@ -64,6 +64,9 @@ export function MermaidRenderer({ code, diagramId, nodes, onNodeClick }: Mermaid
     svg.style.height = 'auto';
     svg.removeAttribute('height');
 
+    // Track listeners for cleanup
+    const cleanups: Array<() => void> = [];
+
     // Add click handlers to matching nodes
     nodes.forEach((node) => {
       const elements = svg.querySelectorAll(`[id*="${node.id}"], .node[id*="${node.id}"]`);
@@ -71,8 +74,10 @@ export function MermaidRenderer({ code, diagramId, nodes, onNodeClick }: Mermaid
         const htmlEl = el as HTMLElement;
         htmlEl.style.cursor = 'pointer';
         htmlEl.classList.add('diagram-clickable');
+        htmlEl.setAttribute('role', 'button');
+        htmlEl.setAttribute('tabindex', '0');
 
-        htmlEl.addEventListener('click', (e) => {
+        const handler = (e: Event) => {
           e.stopPropagation();
           const targetType: DiagramType =
             node.type === 'database'
@@ -83,9 +88,16 @@ export function MermaidRenderer({ code, diagramId, nodes, onNodeClick }: Mermaid
                   ? 'sequence'
                   : 'flowchart';
           onNodeClick(node, targetType);
-        });
+        };
+
+        htmlEl.addEventListener('click', handler);
+        cleanups.push(() => htmlEl.removeEventListener('click', handler));
       });
     });
+
+    return () => {
+      cleanups.forEach((cleanup) => cleanup());
+    };
   }, [svgContent, nodes, onNodeClick]);
 
   if (error) {
