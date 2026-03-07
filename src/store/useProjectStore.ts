@@ -13,6 +13,8 @@ import {
   getInitialMessage,
   generateLocalResponse,
   sendToGemini,
+  extractJsonExtract,
+  removeJsonExtract,
 } from '../services/aiService';
 const DIAGRAM_TYPE_LABELS: Record<DiagramType, string> = {
   flowchart: 'Flujo',
@@ -160,8 +162,112 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         response = generateLocalResponse(updatedMessages, projectData, currentPhase);
       }
 
+      // Extract structured data from AI response (json-extract blocks)
+      const extractedData = extractJsonExtract(response);
+      if (extractedData) {
+        const dataUpdate: Partial<ProjectData> = {};
+
+        // Phase 1 data
+        if (typeof extractedData.name === 'string' && extractedData.name) dataUpdate.name = extractedData.name;
+        if (typeof extractedData.description === 'string' && extractedData.description) dataUpdate.description = extractedData.description;
+        if (Array.isArray(extractedData.actors) && extractedData.actors.length > 0) dataUpdate.actors = extractedData.actors as string[];
+        if (Array.isArray(extractedData.painPoints) && extractedData.painPoints.length > 0) dataUpdate.painPoints = extractedData.painPoints as string[];
+        if (Array.isArray(extractedData.objectives) && extractedData.objectives.length > 0) dataUpdate.objectives = extractedData.objectives as string[];
+
+        // Phase 2 data
+        if (Array.isArray(extractedData.journeySteps) && extractedData.journeySteps.length > 0) {
+          dataUpdate.journeySteps = (extractedData.journeySteps as Array<Record<string, unknown>>).map((s, i) => ({
+            id: uuidv4(),
+            actor: String(s.actor || ''),
+            action: String(s.action || ''),
+            goal: String(s.goal || ''),
+            order: typeof s.order === 'number' ? s.order : i + 1,
+          }));
+        }
+
+        // Phase 3 data
+        if (Array.isArray(extractedData.states) && extractedData.states.length > 0) {
+          dataUpdate.states = (extractedData.states as Array<Record<string, unknown>>).map((s) => ({
+            id: uuidv4(),
+            entity: String(s.entity || ''),
+            name: String(s.name || ''),
+            transitions: Array.isArray(s.transitions)
+              ? (s.transitions as Array<Record<string, string>>).map((t) => ({
+                  from: t.from || '',
+                  to: t.to || '',
+                  trigger: t.trigger || '',
+                  action: t.action || '',
+                }))
+              : [],
+          }));
+        }
+
+        // Phase 4 data
+        if (Array.isArray(extractedData.entities) && extractedData.entities.length > 0) {
+          dataUpdate.entities = (extractedData.entities as Array<Record<string, unknown>>).map((e) => ({
+            id: uuidv4(),
+            name: String(e.name || ''),
+            fields: Array.isArray(e.fields)
+              ? (e.fields as Array<Record<string, unknown>>).map((f) => ({
+                  name: String(f.name || ''),
+                  type: String(f.type || 'String'),
+                  isPrimaryKey: Boolean(f.isPrimaryKey),
+                  isForeignKey: Boolean(f.isForeignKey),
+                  isRequired: f.isRequired !== false,
+                }))
+              : [],
+            relations: Array.isArray(e.relations)
+              ? (e.relations as Array<Record<string, string>>).map((r) => ({
+                  targetEntity: r.targetEntity || '',
+                  type: (r.type as '1-1' | '1-N' | 'N-M') || '1-N',
+                  label: r.label || '',
+                }))
+              : [],
+          }));
+        }
+
+        // Phase 5 data
+        if (Array.isArray(extractedData.endpoints) && extractedData.endpoints.length > 0) {
+          dataUpdate.endpoints = (extractedData.endpoints as Array<Record<string, string>>).map((ep) => ({
+            id: uuidv4(),
+            method: (ep.method as 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE') || 'GET',
+            path: ep.path || '',
+            description: ep.description || '',
+            requestBody: ep.requestBody,
+            responseBody: ep.responseBody,
+            relatedEntity: ep.relatedEntity || '',
+            relatedTransition: ep.relatedTransition,
+          }));
+        }
+
+        if (Object.keys(dataUpdate).length > 0) {
+          get().updateProjectData(dataUpdate);
+
+          // Auto-regenerate the current phase diagram with new data
+          const updatedProjectData = get().projectData;
+          const existingPhaseDiagrams = get().diagrams.filter(
+            (d) => d.phase === currentPhase && !d.isSubDiagram
+          );
+          // Only auto-generate if we don't have a phase diagram yet
+          // (AI-generated mermaid diagrams are separate)
+          if (existingPhaseDiagrams.length === 0) {
+            const diagram = generateDiagramForPhase(currentPhase, updatedProjectData, get().diagrams);
+            if (diagram) {
+              set((state) => ({
+                diagrams: [...state.diagrams, diagram],
+                activeDiagramId: diagram.id,
+                breadcrumbs: [{ diagramId: diagram.id, label: diagram.title }],
+              }));
+            }
+          }
+        }
+      }
+
+      // Remove json-extract from visible message
+      const visibleResponse = removeJsonExtract(response);
+
       // Extract mermaid diagrams from AI response
-      const mermaidCodes = extractMermaidFromText(response);
+      const mermaidCodes = extractMermaidFromText(visibleResponse);
       if (mermaidCodes.length > 0) {
         mermaidCodes.forEach((code) => {
           const detectedType = detectDiagramType(code);
@@ -182,7 +288,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         });
       }
 
-      get().addMessage(response, 'assistant');
+      get().addMessage(visibleResponse, 'assistant');
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Error desconocido';
       get().addMessage(`⚠️ Error: ${errorMsg}. Cambiando a modo local.`, 'assistant');

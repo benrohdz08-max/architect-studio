@@ -60,11 +60,11 @@ export function ChatPanel() {
           codeBlockType = line.slice(3).trim();
           codeLines = [];
           // Hide mermaid and mermaid-meta blocks
-          if (codeBlockType === 'mermaid' || codeBlockType === 'mermaid-meta') continue;
+          if (codeBlockType === 'mermaid' || codeBlockType === 'mermaid-meta' || codeBlockType === 'json-extract') continue;
           continue;
         } else {
           // Closing code block
-          if (codeBlockType === 'mermaid' || codeBlockType === 'mermaid-meta') {
+          if (codeBlockType === 'mermaid' || codeBlockType === 'mermaid-meta' || codeBlockType === 'json-extract') {
             inCodeBlock = false;
             codeBlockType = '';
             continue;
@@ -103,7 +103,7 @@ export function ChatPanel() {
       }
 
       if (inCodeBlock) {
-        if (codeBlockType === 'mermaid' || codeBlockType === 'mermaid-meta') continue;
+        if (codeBlockType === 'mermaid' || codeBlockType === 'mermaid-meta' || codeBlockType === 'json-extract') continue;
         codeLines.push(line);
         continue;
       }
